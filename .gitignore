@@ -1,33 +1,7 @@
-# Environment & Secrets — NEVER commit these
-.env
-.env.*
-!.env.example
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-env/
-
-# Node
 node_modules/
-.npm
-*.log
-
-# OS
+.env
+dist/
+*.db
+*.db-shm
+*.db-wal
 .DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-
-# Misc
-*.key
-*.pem
-secrets/
