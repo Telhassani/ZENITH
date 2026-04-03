@@ -17,7 +17,7 @@ app.use(express.json())
 app.use('/api/v1/system', systemRouter)
 
 // Health check
-app.get('/api/v1/health', (req, res) => {
+app.get('/api/v1/health', (_req, res) => {
   res.json({
     status: 'ok',
     gateway: global.gatewayConnected ? 'connected' : 'disconnected',

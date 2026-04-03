@@ -15,6 +15,10 @@ export function isGatewayConnected(): boolean {
   return gatewayWs !== null && gatewayWs.readyState === WebSocket.OPEN
 }
 
+declare global {
+  var gatewayConnected: boolean
+}
+
 export async function initGatewayConnection(): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -24,9 +28,6 @@ export async function initGatewayConnection(): Promise<void> {
         console.log('Connected to OpenClaw Gateway')
         try {
           await handleHandshake(gatewayWs!)
-          declare global {
-            var gatewayConnected: boolean
-          }
           global.gatewayConnected = true
           resolve()
         } catch (err) {
@@ -69,7 +70,8 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY)
 }
 
-declare global {
-  var gatewayConnected: boolean
+if (typeof global.gatewayConnected === 'undefined') {
+  global.gatewayConnected = false
 }
-global.gatewayConnected = false
+
+

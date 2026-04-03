@@ -1,7 +1,7 @@
 import { useGatewayStore } from '../../stores/gatewayStore'
 
 export function StatusBar() {
-  const { connected, gatewayUrl } = useGatewayStore()
+  const { connected } = useGatewayStore()
 
   return (
     <footer className="h-9 glass-panel mx-4 mb-4 flex items-center px-4 gap-4 text-xs font-mono text-slate-400">
