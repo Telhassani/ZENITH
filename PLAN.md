@@ -57,56 +57,35 @@ ZENITH is a **localhost dashboard that serves as the full control plane** for an
 
 ## System Architecture
 
+> **Deployment model:** ZENITH runs **on the VPS** alongside OpenClaw — not on a local machine. Access it from any browser at `https://zenith.tariqvps.com`.
+
 ```
-┌─── LOCALHOST ────────────────────────────────────────────────────┐
-│                                                                  │
-│  ┌──────────────────┐    WebSocket     ┌─────────────────────┐  │
-│  │  ZENITH Frontend │◄────────────────►│  ZENITH Backend     │  │
-│  │  (Vite + React)  │    REST API      │  (Express + Bun)    │  │
-│  │  localhost:3000   │◄────────────────►│  localhost:3001     │  │
-│  └──────────────────┘                  └──────┬──────────────┘  │
-│                                               │                  │
-│                              ┌────────────────┤                  │
-│                              │                │                  │
-│                         ┌────▼────┐    ┌──────▼──────┐          │
-│                         │ SQLite  │    │ Voice :8888 │          │
-│                         │ (WAL)   │    │ (optional)  │          │
-│                         └─────────┘    └─────────────┘          │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-          │
-          │  WebSocket (OpenClaw Gateway Protocol v3)
-          │  Port 18789 (tunneled or exposed)
-          ▼
+Browser (any device)
+       │ HTTPS / WSS
+       ▼
+Caddy  :443  (zenith.tariqvps.com)
+       │ HTTP proxy + WS upgrade → 127.0.0.1:3002
+       ▼
 ┌─── VPS (tariqvps.com) ───────────────────────────────────────────┐
 │                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  OpenClaw Gateway (ws://0.0.0.0:18789)                    │   │
-│  │                                                          │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐              │   │
-│  │  │ Brain    │  │ Memory   │  │ Heartbeat│              │   │
-│  │  │ (ReAct)  │  │ (SQLite  │  │ (Cron)   │              │   │
-│  │  │          │  │ +Vectors)│  │          │              │   │
-│  │  └──────────┘  └──────────┘  └──────────┘              │   │
-│  │                                                          │   │
-│  │  ┌──────────────────────────────────────────────┐       │   │
-│  │  │ Agent Workspaces                              │       │   │
-│  │  │ ~/.openclaw/workspace-<agent-id>/             │       │   │
-│  │  │   AGENTS.md | SOUL.md | HEARTBEAT.md          │       │   │
-│  │  │   IDENTITY.md | USER.md | TOOLS.md            │       │   │
-│  │  │   memory/ (vector-indexed .md files)          │       │   │
-│  │  └──────────────────────────────────────────────┘       │   │
-│  │                                                          │   │
-│  │  Lane-Based Task Queue:                                  │   │
-│  │  ┌─────────┐ ┌───────────┐ ┌─────────────┐             │   │
-│  │  │ main(4) │ │subagent(8)│ │ custom(1)   │             │   │
-│  │  └─────────┘ └───────────┘ └─────────────┘             │   │
-│  └──────────────────────────────────────────────────────────┘   │
+│  ZENITH  :3002  (Docker, network_mode: host)                     │
+│  ├── Express REST API  /api/v1/*                                 │
+│  │     GET  /agents  → rpcCall('node.list')                      │
+│  │     GET  /tasks   → SQLite                                    │
+│  │     POST /tasks   → SQLite + rpcCall('sessions.send')         │
+│  │     PUT  /tasks/:id/status  → state machine                   │
+│  ├── WebSocket relay  /ws  → browser clients                     │
+│  ├── Static frontend  /*   → dist/ (React SPA)                   │
+│  └── SQLite (WAL)  server/zenith.db                              │
+│                │                                                 │
+│                │  ws://127.0.0.1:55924/gateway  (same host)      │
+│                ▼                                                 │
+│  OpenClaw Gateway  :55924  (Protocol v3)                         │
+│  ├── RPC methods: node.list, sessions.list, sessions.send, …     │
+│  └── Events: node.*, session.*, exec.approval.*                  │
 │                                                                  │
-│  ┌──────────────────┐  ┌────────────────────────────┐           │
-│  │ PKOS MCP         │  │ Channel Integrations       │           │
-│  │ mcp.tariqvps.com │  │ WhatsApp|Telegram|Discord  │           │
-│  └──────────────────┘  └────────────────────────────┘           │
+│  PKOS MCP  (mcp.tariqvps.com)                                    │
+│  OpenClaw Web UI  (oc.tariqvps.com → :55924)                     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

@@ -2,7 +2,7 @@
 
 ## What This Project Is
 
-ZENITH is a **localhost mission control dashboard** for an OpenClaw agent fleet running on a VPS (`tariqvps.com`). It is the UI and control plane — OpenClaw is the execution engine.
+ZENITH is a **VPS-hosted mission control dashboard** for an OpenClaw agent fleet running on `tariqvps.com`. It is deployed on the same VPS as OpenClaw and served at `https://zenith.tariqvps.com` via Caddy. It is the UI and control plane — OpenClaw is the execution engine.
 
 **Key distinction:** ZENITH does NOT manage local PAI/Claude Code infrastructure (hooks, skills, agents/*.md). It connects to OpenClaw on the VPS and manages everything through the OpenClaw Gateway Protocol.
 
@@ -16,11 +16,11 @@ Full architecture, UI design, and feature spec: see `PLAN.md`.
 |-------|--------|
 | Runtime | **Bun** |
 | Frontend | **Vite + React 19** — `src/` — port 3000 |
-| Backend | **Express (Bun)** — `server/` — port 3001 |
+| Backend | **Express (Bun)** — `server/` — port 3002 |
 | Styling | **Tailwind CSS 4 + shadcn/ui** |
 | Animations | **Framer Motion** |
 | State | **Zustand** stores in `src/stores/` |
-| DB | **SQLite** (better-sqlite3, WAL) at `server/zenith.db` |
+| DB | **SQLite** (bun:sqlite, WAL) at `server/zenith.db` |
 | Editor | **Monaco Editor** (lazy-loaded) |
 | Graph | **D3.js + react-force-graph** |
 | Fonts | **Geist** (UI) + **JetBrains Mono** (data/code) |
@@ -86,7 +86,7 @@ All env vars live in `.env` (never committed). See `.env.example` for the full l
 
 | Variable | Purpose |
 |----------|---------|
-| `OPENCLAW_GATEWAY_URL` | `ws://tariqvps.com:18789` |
+| `OPENCLAW_GATEWAY_URL` | `ws://127.0.0.1:55924/gateway` |
 | `OPENCLAW_GATEWAY_TOKEN` | Auth token for Protocol v3 handshake |
 | `PKOS_MCP_URL` | `https://mcp.tariqvps.com/mcp` |
 | `TELEGRAM_BOT_TOKEN` | Telegraf bot token |
@@ -222,5 +222,5 @@ Content state: `idea → drafting → draft → review → scheduled → publish
 - **Full architecture + UI mockups:** `PLAN.md`
 - **OpenClaw Protocol v3 docs:** https://docs.openclaw.ai/gateway/protocol
 - **PKOS MCP:** `https://mcp.tariqvps.com/mcp`
-- **OpenClaw Gateway:** `ws://tariqvps.com:18789`
+- **OpenClaw Gateway:** `ws://127.0.0.1:55924/gateway`
 - **GitHub repo:** https://github.com/Telhassani/ZENITH
