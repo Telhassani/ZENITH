@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { DndContext, DragEndEvent, closestCorners } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useTaskStore, Task, TaskState } from '../../stores/taskStore';
-import { TASK_STATES } from '../../../shared/taskStates';
+import { useTaskStore, Task } from '../../stores/taskStore';
+import { TaskState } from '../../../shared/taskStates';
 import { apiGet, apiPut } from '../../lib/api';
 
 const COLUMNS: { id: TaskState; title: string; color: string }[] = [
