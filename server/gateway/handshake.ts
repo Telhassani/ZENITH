@@ -1,40 +1,23 @@
 import WebSocket from 'ws'
 import { env } from '../config'
 
-interface ConnectChallenge {
-  type: 'event'
-  event: 'connect.challenge'
-  payload: {
-    nonce: string
-    ts: number
-  }
-}
-
-interface HelloOk {
-  type: 'event'
-  event: 'hello.ok'
-  payload: {
-    deviceToken?: string
-    protocol: number
-  }
-}
-
 export async function handleHandshake(ws: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
     let resolved = false
 
     const timeout = setTimeout(() => {
       if (!resolved) {
+        ws.removeListener('message', handleMessage)
         reject(new Error('Handshake timeout'))
       }
     }, 10000)
 
     const handleMessage = (data: WebSocket.Data) => {
       try {
-        const frame: ConnectChallenge | HelloOk = JSON.parse(data.toString())
+        const frame = JSON.parse(data.toString()) as Record<string, unknown>
 
+        // Step 1: Challenge received — send connect request
         if (frame.type === 'event' && frame.event === 'connect.challenge') {
-          // Step 1: Received challenge — send connect request
           const connectRequest = {
             type: 'req',
             id: 'handshake-connect',
@@ -43,23 +26,44 @@ export async function handleHandshake(ws: WebSocket): Promise<void> {
               minProtocol: 3,
               maxProtocol: 3,
               role: 'operator',
-              scopes: ['operator.read', 'operator.write'],
+              scopes: ['operator.read', 'operator.write', 'operator.admin'],
               auth: { token: env.OPENCLAW_GATEWAY_TOKEN },
-              deviceInfo: {
-                name: 'ZENITH Dashboard',
-                type: 'dashboard',
+              client: {
+                id: 'openclaw-control-ui',
+                version: '1.0.0',
+                platform: 'linux',
+                mode: 'ui',
               },
             },
-          } as const
-
+          }
           ws.send(JSON.stringify(connectRequest))
           console.log('Sent connect request')
-        } else if (frame.type === 'event' && frame.event === 'hello.ok') {
-          // Step 2: Handshake complete
-          console.log('Handshake complete - Protocol v3')
+          return
+        }
+
+        // Step 2a: Server responds with event hello.ok
+        if (frame.type === 'event' && frame.event === 'hello.ok') {
           clearTimeout(timeout)
           ws.removeListener('message', handleMessage)
           resolved = true
+          console.log('Handshake complete - Protocol v3 (hello.ok event)')
+          resolve()
+          return
+        }
+
+        // Step 2b: Server responds with res type for the connect request
+        if (frame.type === 'res' && frame.id === 'handshake-connect') {
+          const res = frame as { type: string; id: string; result?: unknown; error?: { message: string } }
+          if (res.error) {
+            clearTimeout(timeout)
+            ws.removeListener('message', handleMessage)
+            reject(new Error(`Connect rejected: ${res.error.message}`))
+            return
+          }
+          clearTimeout(timeout)
+          ws.removeListener('message', handleMessage)
+          resolved = true
+          console.log('Handshake complete - Protocol v3 (res response)')
           resolve()
         }
       } catch (err) {

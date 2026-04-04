@@ -17,9 +17,9 @@ let mockTasks = [
 export function setupMockBackend(app: express.Application, wss: WebSocketServer) {
   console.log('🎭 Mock backend initialized');
 
-  app.get('/api/v1/health', (req, res) => res.json({ status: 'ok', gateway: 'connected', uptime: process.uptime() }));
-  app.get('/api/v1/agents', (req, res) => res.json(mockAgents));
-  app.get('/api/v1/tasks', (req, res) => res.json(mockTasks));
+  app.get('/api/v1/health', (_req, res) => res.json({ status: 'ok', gateway: 'connected', uptime: process.uptime() }));
+  app.get('/api/v1/agents', (_req, res) => res.json(mockAgents));
+  app.get('/api/v1/tasks', (_req, res) => res.json(mockTasks));
   
   app.put('/api/v1/tasks/:id/status', (req, res) => {
     const { id } = req.params;

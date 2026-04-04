@@ -17,7 +17,7 @@ export function handleEvent(frame: unknown) {
 
   // RPC response
   if (f.type === 'res') {
-    handleRpcResponse(f as any)
+    handleRpcResponse(f)
     return
   }
 

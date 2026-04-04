@@ -4,10 +4,11 @@ import { getGatewayWs } from './connection'
 interface RpcResponse {
   type: 'res'
   id: string
-  result?: unknown
+  ok: boolean
+  payload?: unknown
   error?: {
-    code: number
-    message: string
+    code?: number
+    message?: string
   }
 }
 
@@ -46,30 +47,31 @@ export async function rpcCall<T = unknown>(
       },
     })
 
-    const request = {
-      type: 'req',
-      id,
-      method,
-      params,
-    }
-
-    ws.send(JSON.stringify(request))
+    ws.send(JSON.stringify({ type: 'req', id, method, params }))
   })
 }
 
-export function handleRpcResponse(response: RpcResponse) {
+export function handleRpcResponse(frame: Record<string, unknown>) {
+  const response = frame as unknown as RpcResponse
   const pending = pendingRequests.get(response.id)
   if (!pending) {
-    console.warn(`Unknown RPC response id: ${response.id}`)
+    // Handshake response is handled by handshake.ts directly — not an error
+    if (response.id !== 'handshake-connect') {
+      console.warn(`Unknown RPC response id: ${response.id}`)
+    }
     return
   }
 
   pendingRequests.delete(response.id)
 
-  if (response.error) {
-    pending.reject(new Error(response.error.message))
+  if (!response.ok) {
+    const msg =
+      (response.payload as Record<string, unknown>)?.error as string ??
+      (response.error?.message) ??
+      'RPC call failed'
+    pending.reject(new Error(msg))
   } else {
-    pending.resolve(response.result)
+    pending.resolve(response.payload)
   }
 }
 
