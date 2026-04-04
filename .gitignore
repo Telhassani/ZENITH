@@ -1,0 +1,9 @@
+node_modules/
+.env
+dist/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+.a0proj/
+zenith.log
