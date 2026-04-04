@@ -1,0 +1,10 @@
+services:
+  zenith:
+    build: .
+    container_name: zenith
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./server/zenith.db:/app/server/zenith.db

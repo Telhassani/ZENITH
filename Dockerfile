@@ -1,15 +1,9 @@
 FROM oven/bun:1
 WORKDIR /app
 
-# Install build dependencies for native modules
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
-
-# Explicitly set Python path for node-gyp
-ENV PYTHON=/usr/bin/python3
-
-# Install dependencies
+# Install dependencies (ignore better-sqlite3 native postinstall — we use bun:sqlite instead)
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Copy source code
 COPY . .
