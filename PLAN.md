@@ -155,6 +155,74 @@ type OpenClawEvent =
 
 ---
 
+## MISSION MODE vs COMMAND MODE
+
+ZENITH has two distinct interaction modes. MISSION MODE is the default — ambient, read-heavy, real-time awareness. COMMAND MODE is an on-demand drawer for writing operations: creating projects, configuring agents, spawning new agents.
+
+```
+MISSION MODE (default)                   COMMAND MODE (on-demand drawer)
+─────────────────────────────────────    ─────────────────────────────────────
+D3 agent activity graph                  Projects tab — create + manage projects
+Live event feed                          Agents tab — configure SOUL/AGENTS/HEARTBEAT/TOOLS
+Task Kanban                              Spawn tab — wizard to spawn new agents
+Approval Queue
+Mission Overview stats
+```
+
+**Opening COMMAND MODE:** "+" button at top of SideRail (violet gradient, pulsing glow), or Cmd+N.
+**Closing:** Escape, clicking backdrop, or close button.
+**Drawer spec:** 480px wide, full viewport height, z-50, slides from right with spring physics (stiffness:300, damping:32), glass background `rgba(13,13,43,0.85)` + `backdrop-blur-32px`, left border `rgba(255,255,255,0.10)`, left shadow `-24px 0 80px rgba(0,0,0,0.5)`.
+
+---
+
+### Projects Tab
+
+Create and manage OpenClaw projects.
+
+**New Project form:**
+- Name input (text)
+- Goal textarea (2 rows)
+- Agent multi-select (pill toggles with role-colored dots — violet/cyan/slate/emerald)
+- "Create Project" button (violet, CheckCircle2 on success)
+
+**Project list:** Each row shows name, status badge (active=cyan, planning=violet, paused=amber font-mono), agent avatar circles (colored initials).
+
+**Backend (Phase 2+):** `POST /api/v1/projects` → writes to SQLite + calls `agent.create` with project context if orchestrator assigned.
+
+---
+
+### Agents Tab
+
+Configure any agent's workspace files.
+
+**Layout:** 80px wide agent sidebar (avatar + name) | config panel.
+
+**Config panel:**
+- Agent header: avatar, name, lane (font-mono), role selector dropdown
+- File tabs: SOUL / AGENTS / HEARTBEAT / TOOLS
+- Each tab: dark `<textarea>` (`bg-black/35`, font-mono, border-white/6) with file content
+- Save button: emerald, states: idle → saving (800ms) → "Saved to VPS" (2s) → idle
+
+**Backend (Phase 2+):** Save → `PUT /api/v1/agents/:id/config` → `rpcCall('agent.config.set', {file, content})`.
+
+---
+
+### Spawn Tab
+
+Wizard to spawn a new OpenClaw agent.
+
+**Fields:**
+1. Agent name input
+2. Role selector: 4 cards (Orchestrator/Sub-Agent/Specialist/Monitor) with icon + 1-line description
+3. Seed instructions textarea (font-mono, optional)
+4. "Spawn Agent" button — violet gradient, disabled until name + role set
+
+**Success state:** Full-panel animation — agent avatar with double halo rings expanding, mock terminal log showing SOUL.md written + agent.create RPC dispatched + waiting for hello-ok.
+
+**Backend (Phase 2+):** `POST /api/v1/agents` → writes SOUL.md to VPS workspace → `rpcCall('agent.create', {name, role, soul})` → new node appears in D3 graph.
+
+---
+
 ## Honest Design Evaluation + Creative Vision
 
 ### What's Wrong With the Typical Approach
