@@ -774,6 +774,156 @@ class PKOSService {
 
 ---
 
+## ai-memory Integration
+
+ZENITH integrates with **ai-memory** — the portable CLI-based memory vault that persists decisions, notes, tasks, and project context across all AI agents (Claude, OpenClaw, ChatGPT, Ollama).
+
+**What ai-memory is:**
+- Shell CLI at `~/.claude/ai-memory/ai-memory`
+- Backed by an Obsidian vault at `/Users/tariq/Obsidian/ai-memory`
+- Protocol: UMP-v1, version 1.0.0
+- GitHub: `Telhassani/ai-memory`
+- All `api` commands return JSON: `{"status":"ok","data":...}`
+
+**Why it matters for ZENITH:**
+ZENITH is the control plane — but decisions, patterns, and mistakes made across ALL AI sessions (not just OpenClaw) live in ai-memory. Surfacing vault context inside ZENITH makes every task dispatch smarter, shows what was decided and why, and closes the loop between human decisions and agent execution.
+
+---
+
+### ai-memory API Reference (Shell)
+
+**Read commands:**
+```bash
+ai-memory api recall "<1-3 keywords>"     # search vault — returns [{file, line, content}]
+ai-memory api projects                     # list 02-projects/ files
+ai-memory api tasks                        # list open tasks [{text, timestamp}]
+ai-memory api logs                         # list session log files
+ai-memory api nav                          # list all vault files
+```
+
+**Write commands:**
+```bash
+ai-memory api decision "<what and why>"   # → 03-memory/decisions.md
+ai-memory api note "MISTAKE: <fix>"       # → 03-memory/mistakes.md
+ai-memory api note "PATTERN: <technique>" # → 03-memory/patterns.md
+ai-memory api note "<anything else>"      # → 04-logs/SESSION.md
+ai-memory api task "<task text>"          # → 00-system/working-context.md
+ai-memory api project "<name>"            # → 02-projects/<name>.md
+ai-memory api compact                     # archive SESSION.md → 05-archive/
+```
+
+---
+
+### ZENITH Backend Integration
+
+ZENITH backend exposes `/api/v1/memory/*` routes that shell out to the ai-memory CLI:
+
+```typescript
+// server/services/AiMemoryService.ts
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+const BIN = process.env.AI_MEMORY_BIN || `${process.env.HOME}/.claude/ai-memory/ai-memory`;
+
+class AiMemoryService {
+  async recall(query: string) {
+    const { stdout } = await execAsync(`${BIN} api recall "${query.replace(/"/g, '\\"')}"`);
+    return JSON.parse(stdout).data;  // [{file, line, content}]
+  }
+  async projects() { ... }
+  async tasks()    { ... }
+  async decision(text: string) { ... }
+  async note(text: string)     { ... }
+  async task(text: string)     { ... }
+  async compact()              { ... }
+}
+```
+
+**Routes:**
+```
+GET  /api/v1/memory/recall?q=<query>   → ai-memory api recall
+GET  /api/v1/memory/projects           → ai-memory api projects
+GET  /api/v1/memory/tasks              → ai-memory api tasks
+GET  /api/v1/memory/logs               → ai-memory api logs
+POST /api/v1/memory/decision           → ai-memory api decision
+POST /api/v1/memory/note               → ai-memory api note
+POST /api/v1/memory/task               → ai-memory api task
+POST /api/v1/memory/compact            → ai-memory api compact
+```
+
+**VPS deployment note:** ai-memory must be installed on the VPS. Since the Obsidian vault is local, two options:
+1. **Git-sync vault** — push vault to private repo, pull on VPS (simplest)
+2. **SSH mode** — configure ai-memory on VPS with `VAULT_PATH=tariq@local:/Users/tariq/Obsidian/ai-memory` (requires tunneled SSH)
+Option 1 is recommended. Add a `vault:push` / `vault:pull` script.
+
+---
+
+### Memory Panel (ZENITH UI)
+
+New panel: `src/components/panels/MemoryVault.tsx`
+
+**Layout — 3 columns:**
+```
+┌─ Recall Search ──────────────────────────────────────────────────────┐
+│  [🔍 Search vault...                                    ] [↩ Enter]  │
+│                                                                       │
+│  Results:                                                             │
+│  ● decisions.md:14  "chose SQLite WAL over PG for…"                  │
+│  ● SESSION.md:42    "OpenClaw gateway reconnects after…"              │
+└───────────────────────────────────────────────────────────────────────┘
+┌─ Open Tasks ──────────────┐  ┌─ Projects ───────────────────────────┐
+│  □ Build D3 visualizer    │  │  📁 ZENITH                           │
+│  □ Wire Kanban to SM      │  │  📁 PKOS-integration                 │
+│  □ Add X pipeline         │  │  📁 openclaw-vps-setup               │
+│  [+ Add task]             │  └──────────────────────────────────────┘
+└───────────────────────────┘
+┌─ Recent Decisions ────────────────────────────────────────────────────┐
+│  Apr 12  "chose Tailwind v4 + @tailwindcss/vite for ZENITH"          │
+│  Apr 10  "use QMD memory pattern for token efficiency"               │
+│  [+ Log decision]                                                    │
+└───────────────────────────┘
+```
+
+**Quick actions (from any panel via Cmd+M):**
+- "Remember this decision" → logs current context to ai-memory decisions
+- "Add task" → quick task input → `ai-memory api task`
+- After task completes: prompt "Log to memory?" → writes to SESSION.md
+
+---
+
+### Cross-Panel ai-memory Integration
+
+| Panel | ai-memory Integration |
+|-------|-----------------------|
+| Task Dispatch | `recall(task.description)` before dispatch — attach as context |
+| Approval Queue | After resolve: `note("DECISION: approved/rejected <task>")` |
+| Mission Overview | Widget: open task count + recent decision snippet |
+| Agent Editor | After saving agent config: `decision("updated <agent> SOUL.md: <reason>")` |
+| Session Viewer | After session: "Save to memory" → `note(insight)` or `project(name)` |
+| Global Search | Searches ai-memory vault alongside OpenClaw sessions and PKOS |
+
+---
+
+### ai-memory Zustand Store
+
+```typescript
+// src/stores/memoryStore.ts
+interface MemoryStore {
+  tasks: MemoryTask[];          // from api tasks
+  projects: string[];           // from api projects
+  recentDecisions: string[];    // from api recall "decision" (last 5)
+  recallResults: RecallResult[]; // current search results
+  isSearching: boolean;
+
+  recall(query: string): Promise<void>;
+  addTask(text: string): Promise<void>;
+  logDecision(text: string): Promise<void>;
+  compact(): Promise<void>;
+}
+```
+
+---
+
 ## Telegram Integration
 
 ZENITH connects to Telegram as a notification and command channel — bidirectional.
@@ -1089,33 +1239,87 @@ OpenClaw Gateway binds to port 18789. Options for ZENITH to connect:
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Week 1-2)
-- Project scaffolding (Vite + React + Express + Bun)
-- OpenClaw Gateway connection (WebSocket handshake, Protocol v3 RPC wrapper)
-- Agent Fleet panel with role badges (orchestrator / sub-agent)
-- Live Feed panel (event stream relay)
-- Dark theme shell with glassmorphism
-- System Health (Gateway + PKOS + Telegram status)
-- SQLite schema (tasks, events, content, analytics)
+> **Current status (Apr 2026):** Phase 1 scaffold is complete and rendering. Aurora Cosmos UI working, glass panels working, OpenClaw WS relay connected, StatusBar live. Gaps: real data not flowing into Zustand stores, no D3 visualizer, no Kanban logic, no approval queue, no ai-memory integration, no PKOS/Telegram wiring.
 
-### Phase 2: Task Kanban + Orchestration (Week 3-4)
-- TaskState machine (8 states, validated transitions)
-- Task Kanban — columns are routing states, drag enforces valid transitions
-- Task Dispatch with PKOS context enrichment
-- Approval Queue (exec.approval.list/resolve) — also sends Telegram notification
-- Orchestrator View — delegation tree visualization
-- OrchestrationService — track orchestrator→sub-agent relationships from events
+### Phase 1: Foundation ✅ DONE (scaffolded, needs data wiring)
+- [x] Project scaffolding (Vite + React + Bun + Express)
+- [x] OpenClaw Gateway WS handshake + Protocol v3 RPC wrapper
+- [x] Aurora Cosmos background + glass panel system
+- [x] Shell (ChromeBar + SideRail + StatusBar)
+- [x] SQLite schema, Zustand stores, WS relay
+- [ ] **BLOCKER: Wire RPC agent.list → agentStore on connect** (agents never load)
+- [ ] **BLOCKER: Wire WS events → stores (task/agent/gateway real-time updates)**
+- [ ] Mission Overview: real metrics (agent count, active tasks, pending approvals)
+- [ ] SideRail: active state highlighting, tooltips on hover
 
-### Phase 3: Agent Activity Visualizer (Week 5-6)
-- D3 force-directed graph (react-force-graph) with spring physics
-- Agent nodes: glassmorphic cards, status pulse, live task label
-- Collaboration edges: animated, color-coded by type
-- Task Ownership Log (scrollable history below graph)
-- Timeline View (horizontal gantt per agent)
-- Matrix View (task × agent ownership grid)
-- Agent Editor (SOUL.md, AGENTS.md, HEARTBEAT.md via Monaco)
-- Agent Teams (CRUD + deploy)
-- Heartbeat Manager (visual cron editor)
+### Phase 2: Live Data + Agent Fleet (NEXT — highest priority)
+Wire real OpenClaw data through the stack end-to-end:
+- `useGateway` calls `agent.list` on connect → populates `agentStore`
+- `useGateway` calls `session.list`, `exec.approval.list` on connect
+- WS events update stores in real time (agent.status, task.update, approval.new)
+- Agent Fleet panel: real agent cards with halo rings (role-colored), live status
+- Mission Overview: real counts — agents online, active tasks, pending approvals, queue depth
+- Live Feed panel: scrolling WS event stream with type-colored entries
+- Fix SideRail active state (highlight current route)
+
+### Phase 3: D3 Agent Activity Visualizer (crown jewel — second priority)
+- `react-force-graph-2d` (or `d3-force` directly) — force-directed graph
+- Agent nodes: halo ring canvas draw — double ring for orchestrators, rotating dash for active
+- Collaboration edges: color-coded (violet=delegation, cyan=data flow, amber=approval request)
+- Spring physics: `d3.forceLink(strength:0.3) + charge(-300) + collision(20)`
+- Live: nodes appear/disappear as agents start/stop; edges animate on new events
+- Click agent → slide-in panel with agent details + current session transcript
+- Timeline tab: horizontal gantt (agent × time, colored by task)
+- Matrix tab: agent × task ownership grid
+
+### Phase 4: Task Kanban + Approval Queue (third priority)
+- Full 9-state Kanban (inbox → routing → queued → executing → waiting_approval → waiting_review → completed → failed → archived)
+- Drag enforces valid transitions from `shared/taskStates.ts` TRANSITIONS map
+- Backend 400s invalid transitions
+- Task Dispatch panel: form → PKOS recall enrichment → `rpcCall('send', {idempotency})` → moves to queued
+- Approval Queue: `exec.approval.list` polling + WS events → approve/deny buttons → `exec.approval.resolve`
+- Telegram push: new approval → bot message with inline ✅/❌ keyboard
+
+### Phase 5: ai-memory Integration (fourth priority)
+- `server/services/AiMemoryService.ts` — shell exec wrapper for all api commands
+- `/api/v1/memory/*` REST routes
+- `src/stores/memoryStore.ts` Zustand store
+- Memory Vault panel (recall search + open tasks + projects + recent decisions)
+- Cross-panel recall: auto-search vault before task dispatch, attach as context
+- Post-approval auto-log to decisions
+- Cmd+M global shortcut: quick memory entry from anywhere
+- Session Viewer "Save to memory" button
+- **VPS setup:** git-sync Obsidian vault, install ai-memory on VPS
+
+### Phase 6: PKOS + Telegram Wiring
+- `PKOSService` — MCP client for all 8 tools via `mcp.tariqvps.com/mcp`
+- PKOS Chat panel (natural language Q&A)
+- PKOS Memory Manager (browse/add/forget)
+- Global Search: ai-memory vault + OpenClaw sessions + PKOS in parallel
+- `TelegramService` (Telegraf) — approval callbacks, task notifications
+- Telegram Manager panel (bot config, notification rules)
+
+### Phase 7: Agent Editor + Teams + Monaco
+- Agent Editor: Monaco for SOUL.md, AGENTS.md, HEARTBEAT.md, IDENTITY.md
+- Agent CRUD: create new agent, clone, delete via `agent.create` / `agent.config.set`
+- Agent Teams: CRUD + deploy coordinated multi-agent setups
+- Heartbeat Manager: visual cron editor for scheduled agent tasks
+- Orchestrator View: delegation tree (force graph variant, tree layout)
+
+### Phase 8: Content Pipeline + Analytics
+- X Content Pipeline Kanban (ideas → drafting → draft → review → scheduled → published)
+- XApiService: OAuth 2.0 PKCE, post/schedule — approval gate always required
+- Session Viewer (JSONL transcript reader + search + save to PKOS/ai-memory)
+- Analytics Dashboard: SQLite aggregates — tasks/day, agent uptime, approval latency
+- Notification Center: unified feed from all sources
+
+### Phase 9: Polish + Performance
+- Command Palette (Cmd+K): fuzzy search agents, tasks, PKOS, ai-memory, sessions
+- Keyboard shortcuts (j/k nav, Enter open, Esc close, Cmd+M memory)
+- Virtualized lists (react-virtual) for session transcripts and event feeds
+- D3 canvas rendering for graph (perf at 50+ agents)
+- Lazy panel loading (dynamic import per route)
+- Channel Manager, Tools Browser, Logs panel
 
 ### Phase 4: PKOS + Telegram (Week 7-8)
 - PKOSService connecting to mcp.tariqvps.com/mcp (all 8 tools)
